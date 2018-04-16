@@ -36,39 +36,46 @@ version 1.0   (2016/09/28)
 version 1.0.1 (2017/01/17) brightness.txtに関するバグ修正
 '''
 
-import appindicator
-import gtk
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('AppIndicator3', '0.1')
+from gi.repository import Gtk
+from gi.repository import AppIndicator3 as appindicator
+from gi.repository import GObject
 import subprocess
 import re
 import os.path
 
-#明るさのチェック間隔(sec)
+# Interval for checking brightness(sec)
 CHECK_INTERVAL_SEC = 5
+
+# Output
+OUTPUT = "DVI-D-1"
 
 class XrandrIndicator():
     def __init__(self):
-        self.ind = appindicator.Indicator("user-XRandR-indicator",
-                    os.path.dirname(os.path.realpath(__file__)) + "/notification-display-brightness-full.svg", 
-                    appindicator.CATEGORY_APPLICATION_STATUS)
-        self.ind.set_status(appindicator.STATUS_ACTIVE)
-        
+        self.ind = appindicator.Indicator.new("user-XRandR-indicator",
+                    os.path.dirname(os.path.realpath(__file__)) + "/notification-display-brightness-full.svg",
+                    appindicator.IndicatorCategory.APPLICATION_STATUS)
+        self.ind.set_status(appindicator.IndicatorStatus.ACTIVE)
+
         #明るさ情報をファイルから読み込み
-	f = open(os.path.dirname(os.path.realpath(__file__)) + "/brightness.txt", "r")
+        f = open(os.path.dirname(os.path.realpath(__file__)) + "/brightness.txt", "r")
         self.curr_brightness = float(f.read())
-	f.close()
+        f.close()
         #下の文がないと起動時に現在の明るさを表す黒丸が表示されない(小数の桁でも変わるのか？)
         self.curr_brightness = int(self.curr_brightness * 10) * 0.1
 
         #XRandR起動
-        subprocess.call(["xrandr","--output", "DVI-D-0", "--brightness", str(self.curr_brightness)])
+        subprocess.call(["xrandr","--output", OUTPUT, "--brightness", str(self.curr_brightness)])
 
         #コンテキストメニュー 設定
         self.menu_setup()
         self.ind.set_menu(self.menu)
-                
+
     def menu_setup(self):
-        self.menu = gtk.Menu()
-        
+        self.menu = Gtk.Menu()
+
         #明るさ選択部
         for i in range(10,2,-1):
             i2 = i * 0.1
@@ -76,34 +83,34 @@ class XrandrIndicator():
             if i2 == self.curr_brightness:
                 buf = u"%3.1f \u2022" % i2
 
-            menu_items = gtk.MenuItem(buf)
+            menu_items = Gtk.MenuItem(buf)
             menu_items.show()
             menu_items.connect("activate", self.change_brightness, i2)
             self.menu.append(menu_items)
-        
+
         #仕切り線
-        breaker = gtk.SeparatorMenuItem()
+        breaker = Gtk.SeparatorMenuItem()
         breaker.show()
         self.menu.append(breaker)
-        
+
         #Aboutメニュー
-        show_about_item = gtk.MenuItem("About GUI_XRandR")
+        show_about_item = Gtk.MenuItem("About GUI_XRandR")
         show_about_item.connect("activate", self.menu_about_dlg)
         show_about_item.show()
         self.menu.append(show_about_item)
-        
+
         #終了メニュー
-        quit_item = gtk.ImageMenuItem("Quit")
-        quit_item.set_image(gtk.image_new_from_stock('gtk-quit', gtk.ICON_SIZE_MENU))
+        quit_item = Gtk.ImageMenuItem("Quit")
+        quit_item.set_image(Gtk.Image.new_from_stock('Gtk-quit', Gtk.IconSize.BUTTON))
         quit_item.connect("activate", self.menu_quit)
         quit_item.show()
         self.menu.append(quit_item)
-     
-    #スライドの値をコマンドで送信  
+
+    #スライドの値をコマンドで送信
     def change_brightness(self, w, recv_val):
         #recv_val = int(widget.get_value())
         #スライダから受け取った値を以下の変数としておく
-        subprocess.call(["xrandr","--output", "DVI-D-0", "--brightness", str(recv_val)])
+        subprocess.call(["xrandr","--output", OUTPUT, "--brightness", str(recv_val)])
         if recv_val != self.curr_brightness:
             self.curr_brightness = recv_val
             f = open(os.path.dirname(os.path.realpath(__file__)) + "/brightness.txt", "w")
@@ -111,31 +118,31 @@ class XrandrIndicator():
             f.close()
             self.menu_setup()
             self.ind.set_menu(self.menu)
-        
+
     #メニュー ： Aboutダイアログ
     def menu_about_dlg(self, widget):
-        dlg = gtk.MessageDialog(type=gtk.MESSAGE_INFO, buttons=gtk.BUTTONS_OK, message_format='GUI_XRandR')
+        dlg = Gtk.MessageDialog(type=Gtk.MESSAGE_INFO, buttons=Gtk.BUTTONS_OK, message_format='GUI_XRandR')
         dlg.format_secondary_text('クリック操作でxrandrコマンドを送信できるソフトです。\n画面の照度調整が簡単にできます。')
         dlg.run()
         dlg.destroy()
-        
+
     #メニュー ： プログラム終了
     def menu_quit(self, widget, data=None):
-        gtk.main_quit()
-        
+        Gtk.main_quit()
+
     #メイン関数（タイマー設定を行う）
     def main(self):
         # タイマー設定（定期的に chk_brightness 関数を実行する）
-        gtk.timeout_add(CHECK_INTERVAL_SEC*1000, self.chk_brightness)
-        gtk.main()
-        
+        GObject.timeout_add(CHECK_INTERVAL_SEC*1000, self.chk_brightness)
+        Gtk.main()
+
     #現在のbrightnessが、設定したbrightnessと同じになっているか確かめる。
-    #同じになっていなければコマンドを送って設定したbrightnessにする。    
+    #同じになっていなければコマンドを送って設定したbrightnessにする。
     def chk_brightness(self):
-        if self.explr_brightness("DVI-D-0") != self.curr_brightness:
-            subprocess.call(["xrandr","--output", "DVI-D-0", "--brightness", str(self.curr_brightness)])
+        if self.explr_brightness(OUTPUT) != self.curr_brightness:
+            subprocess.call(["xrandr","--output", OUTPUT, "--brightness", str(self.curr_brightness)])
         return True
-        
+
     #引数で指定されたディスプレイの明るさを調べる。返り値は明るさ(float)
     def explr_brightness(self, display):
         #「xrandr --verbose」で情報を取得
